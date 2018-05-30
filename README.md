@@ -1,4 +1,4 @@
-Image-Captioner-Attention
+# Image-Captioner-Attention
 
 This is a [PyTorch](https://pytorch.org) implementation of a topic driven image captioning system.
 The model takes in an input image and a topic and tries to generate a caption that is topic focused and image accurate.
