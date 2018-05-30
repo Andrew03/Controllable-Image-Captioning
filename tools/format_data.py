@@ -3,9 +3,6 @@ import _init_paths
 import lib.utils.process_data as process_data
 import lib.utils.vocabulary as vocabulary
 
-"""
-Run this using python3 because it runs 10x faster than in python2
-"""
 def main(args):
     # Saving the data in splits for faster load time
     train_split, dev_split, test_split, paragraph_topics, paragraph_json = process_data.load_json(args.basedir)
