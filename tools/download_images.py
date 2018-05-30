@@ -8,7 +8,7 @@ def download_images(basedir, progress_bar=True):
     with open("{}/data/raw/paragraphs_v1.json".format(basedir), "r") as f:
         paragraph_json = json.load(f)
         for json in (tqdm(paragraph_json) if progress_bar else paragraph_json):
-            urllib.request.urlretrieve(json['url'], "{}/data/images/test/{}.jpg".format(basedir, json['image_id']))
+            urllib.request.urlretrieve(json['url'], "{}/data/images/{}.jpg".format(basedir, json['image_id']))
 
 def main(args):
     download_images(args.basedir, not args.disable_progress_bar)
