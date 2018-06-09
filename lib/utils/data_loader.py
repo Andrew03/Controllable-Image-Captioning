@@ -29,7 +29,9 @@ class CustomDataSet(Dataset):
                             [self.word_vocab('<EOS>')])
 
         lengths = [len(caption) for caption in captions]
-        return torch.stack(images, 0), torch.LongTensor(topics), torch.LongTensor(captions), lengths, img_ids
+        images_tensor = torch.stack(images, 0)
+        images_tensor.requires_grad_(True)
+        return images_tensor, torch.LongTensor(topics, requires_grad=True), torch.LongTensor(captions, requires_grad=True), lengths, img_ids
 
     def __len__(self):
         return len(self.batched_data)
@@ -46,8 +48,23 @@ def _get_loader(data, batched_data, word_vocab, topic_vocab, basedir, transform,
                       num_workers=num_workers, 
                       collate_fn=collate_fn)
 
+def get_loader(data_set, shuffle=True, num_workers=1):
+    return DataLoader(dataset=data_set, 
+                      shuffle=shuffle, 
+                      num_workers=num_workers, 
+                      collate_fn=collate_fn)
+
 def get_loader(data, batch_size, word_vocab, topic_vocab, basedir, transform, progress_bar=False, randomize=True, max_size=None, shuffle=True, num_workers=1):
     from batch_data import batch_data
 
     batched_data = batch_data(data, batch_size, progress_bar, randomize, max_size)
     return _get_loader(data, batched_data, word_vocab, topic_vocab, basedir, transform, shuffle, num_workers)
+
+def get_split_data_set(data, batch_size, word_vocab, topic_vocab, basedir, transform, num_partitions, progress_bar=False, randomize=True, max_size=None):
+    from torchnet.dataset import SplitDataset
+    from batch_data import batch_data
+
+    batched_data = batch_data(data, batch_size, progress_bar, randomize, max_size)
+    data_set = CustomDataSet(data, batched_data, word_vocab, topic_vocab, basedir, transform)
+    partitions = {"{}".format(i) : 1.0 / num_partitions for i in range(num_partitions)}
+    return SplitDataset(data_set, partitions)
