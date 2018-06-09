@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--basedir', type=str, 
                         default='.', 
-                        help='The root directory of the project. Default value of \'../../\' (the current directory).')
+                        help='The root directory of the project. Default value of \'.\' (the current directory).')
     parser.add_argument('--disable_progress_bar', action='store_true', 
                         default=False, 
                         help='Set to disable the progress bar.')

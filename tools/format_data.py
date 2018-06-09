@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--basedir', type=str,
                         default='.',
-                        help='The root directory of the project. Default value of \'.\' (the previous directory).')
+                        help='The root directory of the project. Default value of \'.\' (the current directory).')
     parser.add_argument('--min_occurrences', type=int,
                         default=5,
                         help='The minimum number of times a word must appear in the train data to be included \
