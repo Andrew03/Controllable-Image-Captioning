@@ -30,8 +30,12 @@ class CustomDataSet(Dataset):
 
         lengths = [len(caption) for caption in captions]
         images_tensor = torch.stack(images, 0)
+        topics_tensor = torch.LongTensor(topics)
+        captions_tensor = torch.LongTensor(captions)
         images_tensor.requires_grad_(True)
-        return images_tensor, torch.LongTensor(topics, requires_grad=True), torch.LongTensor(captions, requires_grad=True), lengths, img_ids
+        topics_tensor.requires_grad_(True)
+        captions_tensor.requires_grad_(True)
+        return images_tensor, topics_tensor, captions_tensor, lengths, img_ids
 
     def __len__(self):
         return len(self.batched_data)
