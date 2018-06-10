@@ -78,7 +78,10 @@ class Decoder(nn.Module):
         """
         # self.lstm.flatten_parameters()
         for i in range(lengths):
-            embedding = torch.index_select(word_embeddings, 1, torch.cuda.LongTensor([i]))
+            index = torch.LongTensor([i])
+            if word_embeddings.is_cuda:
+                index = index.to(torch.device("cuda:{}".format(word_embeddings.get_device())))
+            embedding = torch.index_select(word_embeddings, 1, index)
             attention, alpha = self._compute_attention(features, topic_embeddings, hidden[0])
             attention = attention.unsqueeze(1)
             average_attention = alpha if average_attention is None else average_attention + alpha
