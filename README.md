@@ -16,7 +16,7 @@ The model takes in an input image and a topic and tries to generate a caption th
 `mkdir data && mkdir data/images && mkdir data/datasets`
 3. Create a softlink to the raw data <br>
 `ln -s $RAW_DATA data/raw`
-4. Download the images (This while take a while) <br>
+4. Download the images (This will take a while) <br>
 `python tools/download_images.py`
 5. Process the data and build a vocabulary <br>
 `python tools/format_data.py`
