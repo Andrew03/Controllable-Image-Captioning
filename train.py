@@ -37,7 +37,7 @@ def main(args):
 
     # Loading models and optimizers
     if args.load_checkpoint is not None:
-        checkpoint = torch.load(args.load_checkpoint, map_location='cpu')
+        checkpoint = torch.load(args.load_checkpoint)
         print("loading from checkpoint {}".format(args.load_checkpoint))
         start_epoch = checkpoint['epoch']
         decoder.load_state_dict(checkpoint['state_dict'])
@@ -54,6 +54,7 @@ def main(args):
         pass
     encoder.to(device)
     decoder.to(device)
+    optimizer = optim.Adam(params, lr=args.lr)
 
     # Defining and loading output data, if it exists
     train_loss = {}
@@ -153,8 +154,8 @@ if __name__ == '__main__':
                         required=True,
                         help='The name to save the model under. Required.')
     parser.add_argument('--batch_size', type=int,
-                        default=16,
-                        help='Minibatch size. Default value of 16.')
+                        default=32,
+                        help='Minibatch size. Default value of 32.')
     parser.add_argument('--max_num_batches', type=int,
                         default=None,
                         help='Maximum number of batches in an epoch. Default value of None.')
