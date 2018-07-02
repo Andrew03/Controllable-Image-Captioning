@@ -41,7 +41,7 @@ class CustomDataSet(Dataset):
 
 def collate_fn(data):
     images, topics, captions, lengths, image_ids = zip(*data)
-    return images[0], topics[0], captions[0], lengths[0], image_ids[0]
+    return {'images': images[0], 'topics': topics[0], 'captions': captions[0], 'lengths': lengths[0], 'image_ids': image_ids[0]}
 
 def get_loader(data, batch_size, vocabs, data_dir, transform, progress_bar=False, randomize=True, max_size=None, shuffle=True, num_workers=1):
     from batch_data import batch_data

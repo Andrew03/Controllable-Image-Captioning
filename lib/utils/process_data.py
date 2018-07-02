@@ -2,15 +2,15 @@ def load_json(data_dir):
     import pickle
     import json
 
-    with open("{}/data/raw/splits/train_split.json".format(data_dir), "r") as f:
+    with open("{}/raw/splits/train_split.json".format(data_dir), "r") as f:
       train_split = json.load(f)
-    with open("{}/data/raw/splits/dev_split.json".format(data_dir), "r") as f:
+    with open("{}/raw/splits/dev_split.json".format(data_dir), "r") as f:
         dev_split = json.load(f)
-    with open("{}/data/raw/splits/test_split.json".format(data_dir), "r") as f:
+    with open("{}/raw/splits/test_split.json".format(data_dir), "r") as f:
         test_split = json.load(f)
-    with open("{}/data/raw/paragraphs_topics_v1.pickle".format(data_dir), "rb") as f:
+    with open("{}/raw/paragraphs_topics_v1.pickle".format(data_dir), "rb") as f:
         paragraph_topics = pickle.load(f)
-    with open("{}/data/raw/paragraphs_v1.json".format(data_dir), "r") as f:
+    with open("{}/raw/paragraphs_v1.json".format(data_dir), "r") as f:
         paragraph_json = json.load(f)
     return train_split, dev_split, test_split, paragraph_topics, paragraph_json
 
@@ -54,7 +54,7 @@ def parse_data(train_split, dev_split, test_split, paragraph_topics, paragraph_j
 def save_data(train_data, dev_data, test_data, image_ids, topic_set, data_dir):
     import pickle
 
-    base = "{}/data/datasets".format(data_dir)
+    base = "{}/datasets".format(data_dir)
     with open("{}/train_data.pkl".format(base), "wb") as f:
         pickle.dump(train_data, f)
     with open("{}/dev_data.pkl".format(base), "wb") as f:
@@ -70,7 +70,7 @@ def save_data(train_data, dev_data, test_data, image_ids, topic_set, data_dir):
 def load_data(data_dir):
     import pickle
 
-    base = "{}/data/datasets".format(data_dir)
+    base = "{}/datasets".format(data_dir)
     with open("{}/train_data.pkl".format(base), "rb") as f:
         train_data = pickle.load(f)
     with open("{}/dev_data.pkl".format(base), "rb") as f:
