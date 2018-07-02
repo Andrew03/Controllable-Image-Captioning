@@ -23,7 +23,6 @@ def batch_data(data, batch_size, progress_bar=True, randomize=True, max_size=Non
     from tqdm import tqdm
 
     batched_set = {}
-    counter = 0
     for (image_id, topic, sentence) in (tqdm(data) if progress_bar else data):
         caption_len = len(sentence)
         if caption_len not in batched_set.keys():

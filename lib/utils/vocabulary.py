@@ -45,17 +45,17 @@ def build_vocab(sentences, min_occurrences=5, progress_bar=True):
         vocab.add_word(word)
     return vocab
 
-def save_vocab(vocab, basedir, is_word_vocab=True, min_occurrences=5):
+def save_vocab(vocab, data_dir, min_occurrences=5):
     import pickle
 
-    save_file = "{}/data/datasets/{}_vocab_{}.pkl".format(basedir, "word" if is_word_vocab else "topic", min_occurrences)
+    save_file = "{}/data/datasets/vocab_{}.pkl".format(data_dir, min_occurrences)
     with open(save_file, "wb") as f:
         pickle.dump(vocab, f)
     return save_file
 
-def load_vocab(basedir, is_word_vocab=True, min_occurrences=5):
+def load_vocab(data_dir, min_occurrences=5):
     import pickle
 
-    save_file = "{}/data/datasets/{}_vocab_{}.pkl".format(basedir, "word" if is_word_vocab else "topic", min_occurrences)
+    save_file = "{}/data/datasets/vocab_{}.pkl".format(data_dir, min_occurrences)
     with open(save_file, "rb") as f:
         return pickle.load(f)

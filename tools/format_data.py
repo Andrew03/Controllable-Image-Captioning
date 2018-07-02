@@ -13,13 +13,12 @@ def main(args):
 
     # Building and saving the vocabulary
     word_vocab = vocabulary.build_vocab([x[2] for x in train_data], args.min_occurrences)
-    save_file = vocabulary.save_vocab(word_vocab, args.basedir, is_word_vocab=True, min_occurrences=args.min_occurrences)
-    print("Built and saved word vocabulary at {}".format(save_file))
     topic_vocab = vocabulary.Vocabulary()
     for topic in topic_set:
         topic_vocab.add_word(topic)
-    save_file = vocabulary.save_vocab(topic_vocab, args.basedir, is_word_vocab=False, min_occurrences=args.min_occurrences)
-    print("Built and saved topic vocabulary at {}".format(save_file))
+    vocab = {'word_vocab': word_vocab, 'topic_vocab': topic_vocab}
+    save_file = vocabulary.save_vocab(vocab, args.basedir, min_occurrences=args.min_occurrences)
+    print("Built and saved vocabularies at {}".format(save_file))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
