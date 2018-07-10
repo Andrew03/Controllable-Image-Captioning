@@ -1,5 +1,5 @@
-import argparse
-import os
+import argparse 
+import os 
 import pickle
 from tqdm import tqdm
 import torch
@@ -42,7 +42,7 @@ def main(args):
 
     """ Defining Model and Training Variables """
     device = torch.device("cuda" if torch.cuda.is_available() and args.use_cuda else "cpu")
-    model = Model(512, 196, 512, 512, len(vocabs['word_vocab']), len(vocabs['topic_vocab']))
+    model = Model(512, 196, 512, 512, len(vocabs['word_vocab']), len(vocabs['topic_vocab']), num_layers=args.num_layers, dropout=args.dropout, tanh_after=args.tanh_after, is_normalized=args.is_normalized)
     if args.start_epoch > 0:
         path = os.path.join(args.output_dir, "checkpoint_{}.pt".format(args.start_epoch))
         checkpoint = torch.load(path) if args.use_cuda else torch.load(path, map_location=lambda storage, loc: storage)
@@ -64,26 +64,23 @@ def main(args):
         scheduler=scheduler,
         data_loaders=data_loaders,
         device=device,
+        output_dir=args.output_dir,
+        start_epoch=args.start_epoch,
         num_epochs=args.num_epochs,
-        log_interval=args.log_interval
+        log_interval=args.log_interval,
+        grad_clip=args.grad_clip
     )
 
     """ Updating Logs """
+    # just in case updating doesn't work
+    with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
+            pickle.dump(logs, f)
+
     if args.start_epoch > 0:
         for phase in ['train', 'val']:
-            for score in ['loss', 'accuracy']:
-                old_logs[phase][score].update(logs[phase][score])
-        logs = old_logs
+            logs[phase].update(old_logs[phase])
 
-    """ Saving the Best Models """
-    len_train_loader = len(data_loaders['train'])
-    best_loss = logs['val'][0][len_train_loader]
-    for epoch, loss in sorted(logs['val'].items(), key=lambda x: x[1]):
-        if loss < best_loss:
-            best_loss = loss
-            torch.save(model_data[epoch], os.path.join(args.output_dir, "checkpoint_{}.pt".join(epoch)))
-
-    with open(os.path.join(args.output_dir, "logs.pkl"), "rb") as f:
+    with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
             pickle.dump(logs, f)
 
 if __name__ == '__main__':
@@ -119,6 +116,21 @@ if __name__ == '__main__':
     parser.add_argument('--disable_cuda', action='store_true',
                         default=False,
                         help='Set to disable cuda.')
+    parser.add_argument('--tanh_after', action='store_true',
+                        default=False,
+                        help='Set to use tanh after.')
+    parser.add_argument('--is_normalized', action='store_true',
+                        default=False,
+                        help='Set to disable normalize encoder.')
+    parser.add_argument('--grad_clip', type=float,
+                        default=5.0,
+                        help='Gradient clip value. Default value of 5.0')
+    parser.add_argument('--dropout', type=float,
+                        default=0.5,
+                        help='Dropout value. Default value of 0.5')
+    parser.add_argument('--num_layers', type=int,
+                        default=1,
+                        help='Number of layers in decoder. Default value of 1')
     args = parser.parse_args()
     args.use_cuda = not args.disable_cuda
     main(args)

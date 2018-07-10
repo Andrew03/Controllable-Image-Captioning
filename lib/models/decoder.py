@@ -91,8 +91,28 @@ class Decoder(nn.Module):
             words = self.output(self.dropout_layer(out))
             word_space = torch.cat([word_space, words], 1) if word_space is not None else words
         #self.lstm.flatten_parameters()
-        word_space = pack_padded_sequence(word_space, [lengths for i in range(len(captions))], batch_first=True)[0]
-        return F.log_softmax(word_space, dim=1), F.softmax(word_space, dim=1)#, average_attention.tolist()
+        return F.log_softmax(word_space, dim=2), F.softmax(word_space, dim=2)#, average_attention.tolist()
+
+    def batch_sample(self, features, topics, beam_size=1, start_token=0, end_token=1):
+        topic_embeddings = self.topic_embed(topics)
+        hidden = self._init_hidden(features, topic_embeddings)
+        batch_size = topics.size(0)
+        completed_phrases = [[] for _ in range(batch_size)]
+        best_phrases = [[] for _ in range(batch_size)]
+        scores = []
+
+        initial_caption = create_predict_input_captions([start_token]).repeat(batch_size, 1)
+        print(initial_caption.size())
+        embedding = self.word_embed(initial_caption).unsqueeze(1)
+        attention, _ = self._compute_attention(features, topic_embeddings, hidden[0])
+        print(embedding.size())
+        print(attention.size())
+        input = torch.cat([attention, embedding], 1).unsqueeze(1)
+        out, hidden = self.lstm(input, hidden)
+        word_scores = F.softmax(words, dim=2)
+        print("word score size: {}".format(word_scores.size()))
+        top_scores, top_captions = word_scores.topk(beam_size)
+
 
     def sample(self, features, topics, beam_size=1, start_token=0, end_token=1):
         topic_embeddings = self.topic_embed(topics)
