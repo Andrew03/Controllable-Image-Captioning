@@ -13,7 +13,21 @@ from lib.utils.data_loader import get_loader
 from lib.utils.process_data import load_data
 from lib.utils.vocabulary import load_vocab
 
-def run(args):
+def run(model, data, vocabs, device):
+    model.eval()
+    captions = data['captions']
+    targets = captions.narrow(1, 1, captions.size(1) - 2)
+    images = data['images'].to(device)
+    topics = data['topics'].to(device)
+    outputs = model.sample(images, topics, beam_size=10)
+    print("topic: {}".format(vocabs['topic_vocab'](topics[0].item())))
+    print("OUTPUTS:")
+    for i in range(10):
+        print(" ".join([vocabs['word_vocab'](x.item()) for x in outputs[i][1]][:-1]))
+    print("TARGETS:")
+    print(" ".join([vocabs['word_vocab'](x.item()) for x in targets[0]]))
+
+def main(args):
     """ Loading Data """
     train_data, val_data, test_data, image_ids, topic_set = load_data(args.data_dir)
     data = {'train': train_data, 'val': val_data}
@@ -47,22 +61,9 @@ def run(args):
     model.load_state_dict(checkpoint['state_dict'])
     model.to(device)
 
-    model.eval()
-    data =  next(iter(data_loaders["val"]))
-    captions = data['captions']
-    targets = captions.narrow(1, 1, captions.size(1) - 2)
-    images = data['images'].to(device)
-    topics = data['topics'].to(device)
-    outputs = model.sample(images, topics, beam_size=10)
-    print("topic: {}".format(vocabs['topic_vocab'](topics[0].item())))
-    print("OUTPUTS:")
-    for i in range(10):
-        print(" ".join([vocabs['word_vocab'](x.item()) for x in outputs[i][1]][:-1]))
-    print("TARGETS:")
-    print(" ".join([vocabs['word_vocab'](x.item()) for x in targets[0]]))
+    data =  next(iter(data_loaders['val']))
 
-def main(args):
-    run(args)
+    run(model, data, vocabs, device)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
