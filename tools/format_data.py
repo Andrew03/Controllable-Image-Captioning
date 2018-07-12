@@ -1,26 +1,31 @@
-import argparse
-import _init_paths
-import lib.utils.process_data as process_data
-import lib.utils.vocabulary as vocabulary
+def process_data(data_dir, min_occurrences=5):
+    import _init_paths
+    import lib.utils.process_data as process_data
+    import lib.utils.vocabulary as vocabulary
 
-def main(args):
     # Saving the data in splits for faster load time
-    train_split, dev_split, test_split, paragraph_topics, paragraph_json = process_data.load_json(args.data_dir)
+    train_split, dev_split, test_split, paragraph_topics, paragraph_json = process_data.load_json(data_dir)
     train_data, dev_data, test_data, image_ids, topic_set = process_data.parse_data(train_split, dev_split, test_split, 
-                                                                                    paragraph_topics, paragraph_json, args.disable_progress_bar)
-    base = process_data.save_data(train_data, dev_data, test_data, image_ids, topic_set, args.data_dir)
-    print("Processed and saved data at {}".format(base))
+                                                                                    paragraph_topics, paragraph_json, disable_progress_bar)
+    base = process_data.save_data(train_data, dev_data, test_data, image_ids, topic_set, data_dir)
 
     # Building and saving the vocabulary
-    word_vocab = vocabulary.build_vocab([x[2] for x in train_data], args.min_occurrences)
+    word_vocab = vocabulary.build_vocab([x[2] for x in train_data], min_occurrences)
     topic_vocab = vocabulary.Vocabulary()
     for topic in topic_set:
         topic_vocab.add_word(topic)
     vocab = {'word_vocab': word_vocab, 'topic_vocab': topic_vocab}
-    save_file = vocabulary.save_vocab(vocab, args.data_dir, min_occurrences=args.min_occurrences)
+    save_file = vocabulary.save_vocab(vocab, data_dir, min_occurrences=min_occurrences)
+    return base, save_file
+
+def main(args):
+    base, save_file = process_data(args.data_dir, args.min_occurrences)
+    print("Processed and saved data at {}".format(base))
     print("Built and saved vocabularies at {}".format(save_file))
 
 if __name__ == '__main__':
+    import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str,
                         default='./data',

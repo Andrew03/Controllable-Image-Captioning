@@ -1,9 +1,13 @@
-import argparse
 
 def download_images(basedir, progress_bar=True):
     import urllib.request 
     import json
-    from tqdm import tqdm
+    import _init_paths
+    from lib.utils.detect_notebook import is_notebook
+    if is_notebook():
+        from tqdm import tqdm_notebook as tqdm
+    else:
+        from tqdm import tqdm
 
     with open("{}/data/raw/paragraphs_v1.json".format(basedir), "r") as f:
         paragraph_json = json.load(f)
@@ -15,6 +19,8 @@ def main(args):
     print("Finished downloading!")
 
 if __name__ == '__main__':
+    import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--basedir', type=str, 
                         default='.', 

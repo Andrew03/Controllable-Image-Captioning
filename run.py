@@ -1,14 +1,3 @@
-import argparse 
-import os 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torchvision.transforms as transforms
-from lib.models.model import Model
-from lib.utils.data_loader import get_loader
-from lib.utils.process_data import load_data
-from lib.utils.vocabulary import load_vocab
-
 def run(model, data, vocabs, device, beam_size=10):
     model.eval()
     captions = data['captions']
@@ -24,6 +13,14 @@ def run(model, data, vocabs, device, beam_size=10):
     print(" ".join([vocabs['word_vocab'](x.item()) for x in targets[0]]))
 
 def main(args):
+    import os.path
+    import torch
+    import torchvision.transforms as transforms
+    from lib.models.model import Model
+    from lib.utils.data_loader import get_loader
+    from lib.utils.process_data import load_data
+    from lib.utils.vocabulary import load_vocab
+
     """ Loading Data """
     train_data, val_data, test_data, image_ids, topic_set = load_data(args.data_dir)
     data = {'train': train_data, 'val': val_data}
@@ -62,6 +59,7 @@ def main(args):
     run(model, data, vocabs, device, args.beam_size)
 
 if __name__ == "__main__":
+    import argparse 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str,
                         default='data',

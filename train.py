@@ -1,20 +1,15 @@
-import argparse
-import pickle
-import os
-import torch
 import torch.distributed as dist
-import torch.optim as optim
-import torch.nn as nn
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from torch.multiprocessing import Process
-import lib.utils.trainer as trainer
-from lib.utils.process_data import load_data
-from lib.utils.vocabulary import load_vocab
-from lib.utils.data_loader import get_loader, get_split_data_set, collate_fn
-from lib.models.model import Model
 
 def run(rank, size, split_data, vocabs, args):
+    import os
+    import pickle
+    import torch
+    import torch.optim as optim
+    from torch.utils.data import DataLoader
+    import lib.utils.trainer as trainer
+    from lib.utils.data_loader import get_split_data_set
+    from lib.models.model import Model
+
     for mode, data in split_data.items():
         data.select(rank)
     data_loaders = {
@@ -70,6 +65,8 @@ def no_average(model):
     pass
 
 def init_processes(rank, size, split_data, vocabs, args, fn, backend='gloo'):
+    import os
+
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
@@ -78,6 +75,12 @@ def init_processes(rank, size, split_data, vocabs, args, fn, backend='gloo'):
 
 
 def main(args):
+    import torchvision.transforms as transforms
+    from torch.multiprocessing import Process
+    from lib.utils.process_data import load_data
+    from lib.utils.vocabulary import load_vocab
+    from lib.utils.data_loader import get_split_data_set
+
     """Loading Data"""
     train_data, val_data, test_data, image_ids, topic_set = load_data(args.data_dir)
     data = {'train': train_data, 'val': val_data}
@@ -118,6 +121,9 @@ def main(args):
         run(0, 1, split_data, vocabs, args)
 
 if __name__ == "__main__":
+    import argparse
+    import os
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_gpus", type=int,
                         default=1,

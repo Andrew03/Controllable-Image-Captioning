@@ -15,7 +15,11 @@ def load_json(data_dir):
     return train_split, dev_split, test_split, paragraph_topics, paragraph_json
 
 def parse_data(train_split, dev_split, test_split, paragraph_topics, paragraph_json, progress_bar=True):
-    from tqdm import tqdm
+    from lib.utils.detect_notebook import is_notebook
+    if is_notebook:
+        from tqdm import tqdm_notebook as tqdm
+    else:
+        from tqdm import tqdm
     import nltk
     import spacy
     sent_detector = nltk.data.load('tokenizers/punkt/english.pickle')

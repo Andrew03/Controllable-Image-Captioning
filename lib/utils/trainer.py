@@ -1,6 +1,5 @@
 def find_accuracy(predicted, target, length):
     from nltk.translate.bleu_score import sentence_bleu
-    from tqdm import tqdm
     top_predicted = predicted.argmax(dim=2).tolist()
     target = target.tolist()
     bleu_score = 0
@@ -16,8 +15,12 @@ def no_average(model):
 def train_model(model, criterion, optimizer, scheduler, data_loaders, device, output_dir, rank=0, num_gpus=1, average_gradients=no_average, start_epoch=0, num_epochs=10, log_interval=100, grad_clip=5.0):
     import os
     import torch
-    from tqdm import tqdm
     from torch.nn.utils.rnn import pack_padded_sequence
+    from lib.utils.detect_notebook import is_notebook
+    if is_notebook():
+        from tqdm import tqdm_notebook as tqdm
+    else:
+        from tqdm import tqdm
 
     """ Defining Logging Structures """
     # Modify this for storage reasons later

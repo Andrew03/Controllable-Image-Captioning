@@ -26,7 +26,12 @@ class Vocabulary(object):
 """Builds a Vocabulary object"""
 def build_vocab(sentences, min_occurrences=5, progress_bar=True):
     from collections import Counter
-    from tqdm import tqdm
+    from lib.utils.detect_notebook import is_notebook
+    if is_notebook:
+        from tqdm import tqdm_notebook as tqdm
+    else:
+        from tqdm import tqdm
+
     counter = Counter()
     for sentence in (tqdm(sentences) if progress_bar else sentences):
         counter.update(sentence)

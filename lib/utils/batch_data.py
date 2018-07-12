@@ -20,7 +20,11 @@ class BatchedData(object):
 
 def batch_data(data, batch_size, progress_bar=True, randomize=True, max_size=None):
     import random
-    from tqdm import tqdm
+    from lib.utils.detect_notebook import is_notebook()
+    if is_notebook():
+        from tqdm import tqdm_notebook as tqdm
+    else:
+        from tqdm import tqdm
 
     batched_set = {}
     for (image_id, topic, sentence) in (tqdm(data) if progress_bar else data):
