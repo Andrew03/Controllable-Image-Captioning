@@ -1,88 +1,127 @@
-import argparse 
-import os 
+import argparse
 import pickle
+import os
 import torch
-import torch.nn as nn
+import torch.distributed as dist
 import torch.optim as optim
+import torch.nn as nn
 import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torch.multiprocessing import Process
 import lib.utils.trainer as trainer
 from lib.utils.process_data import load_data
 from lib.utils.vocabulary import load_vocab
-from lib.utils.data_loader import get_loader
+from lib.utils.data_loader import get_loader, get_split_data_set, collate_fn
 from lib.models.model import Model
 
+def run(rank, size, split_data, vocabs, args):
+    for mode, data in split_data.items():
+        data.select(rank)
+    data_loaders = {
+        x: DataLoader(dataset=split_data[x], shuffle=True, num_workers=1, collate_fn=collate_fn) for x in ['train', 'val']
+    }
+    device = torch.device("cuda:{}".format(rank) if torch.cuda.is_available() and args.use_cuda else "cpu")
+    model = Model(512, 196, 512, 512, len(vocabs['word_vocab']), len(vocabs['topic_vocab']), num_layers=args.num_layers, dropout=args.dropout, tanh_after=args.tanh_after, is_normalized=args.is_normalized)
+    if args.start_epoch > 0:
+        path = os.path.join(args.output_dir, "checkpoint_{}.pt".format(args.start_epoch))
+        checkpoint = torch.load(path) if args.use_cuda else torch.load(path, map_location=lambda storage, loc: storage)
+        model.load_state_dict(checkpoint['state_dict'])
+        del checkpoint
+    model.to(device)
+    optimizer = optim.Adam(model.parameters(), args.lr)
+    if args.start_epoch > 0:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        del checkpoint
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2, verbose=True)
+    criterion = nn.NLLLoss()
+
+    logs, model_data = trainer.train_model(
+        model, 
+        criterion, 
+        optimizer, 
+        scheduler, 
+        data_loaders, 
+        device, 
+        args.output_dir, 
+        rank, 
+        args.num_gpus,
+        average_gradients if size > 1 else no_average, 
+        args.start_epoch, 
+        args.num_epochs, 
+        args.log_interval, 
+        args.grad_clip)
+    """Updating Logs"""
+    if rank == 0 and args.start_epoch > 0:
+        with open(os.path.join(args.output_dir, "logs.pkl"), "rb") as f:
+            old_logs = pickle.load(f)
+        for phase in ['train', 'val']:
+            logs[phase].update(old_logs[phase])
+        with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
+            pickle.dump(logs, f)
+
+""" Gradient averaging. """
+def average_gradients(model):
+    size = float(dist.get_world_size())
+    for param in model.parameters():
+        dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM)
+        param.grad.data /= size
+
+def no_average(model):
+    pass
+
+def init_processes(rank, size, split_data, vocabs, args, fn, backend='gloo'):
+    """ Initialize the distributed environment. """
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '29500'
+    dist.init_process_group(backend, rank=rank, world_size=size)
+    fn(rank, size, split_data, vocabs, args)
+
+
 def main(args):
-    """ Loading Data """
+    """Loading Data"""
     train_data, val_data, test_data, image_ids, topic_set = load_data(args.data_dir)
     data = {'train': train_data, 'val': val_data}
     transform = {
         'train': transforms.Compose([
             transforms.Resize(256),
             transforms.RandomCrop(224),
-            transforms.RandomHorizontalFlip(), 
-            transforms.RandomVerticalFlip(), 
-            transforms.ToTensor(), 
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225])
         ]),
         'val': transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
-            transforms.ToTensor(), 
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225])
         ])
     }
     vocabs = load_vocab(args.data_dir, min_occurrences=args.min_occurrences)
-    data_loaders = {
-        x: get_loader(data[x], args.batch_size, vocabs, args.data_dir, transform[x], max_size=args.max_size) for x in ['train', 'val']
+    while args.batch_size % args.num_gpus != 0:
+        args.batch_size += 1
+    split_data = {
+        x: get_split_data_set(data[x], args.batch_size, vocabs, args.data_dir, transform[x], args.num_gpus, randomize=True, max_size=args.max_size) for x in ['train', 'val']
     }
+    if args.num_gpus > 1:
+        processes = []
+        for rank in range(args.num_gpus):
+            p = Process(target=init_processes, args=(rank, args.num_gpus, split_data, vocabs, args, run))
+            p.start()
+            processes.append(p)
 
-    """ Defining Model and Training Variables """
-    device = torch.device("cuda" if torch.cuda.is_available() and args.use_cuda else "cpu")
-    model = Model(512, 196, 512, 512, len(vocabs['word_vocab']), len(vocabs['topic_vocab']), num_layers=args.num_layers, dropout=args.dropout, tanh_after=args.tanh_after, is_normalized=args.is_normalized)
-    if args.start_epoch > 0:
-        path = os.path.join(args.output_dir, "checkpoint_{}.pt".format(args.start_epoch))
-        checkpoint = torch.load(path) if args.use_cuda else torch.load(path, map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint['state_dict'])
-    model.to(device)
-    optimizer = optim.Adam(model.parameters(), args.lr)
-    if args.start_epoch > 0:
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        del checkpoint
-        with open(os.path.join(args.output_dir, "logs.pkl")) as f:
-            old_logs = pickle.load(f)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=1, verbose=True)
+        for p in processes:
+            p.join()
+    else:
+        run(0, 1, split_data, vocabs, args)
 
-    """ Training the Model """
-    logs, model_data = trainer.train_model_distributed(
-        model=model, 
-        criterion=nn.NLLLoss(), 
-        optimizer=optimizer, 
-        scheduler=scheduler,
-        data_loaders=data_loaders,
-        device=device,
-        output_dir=args.output_dir,
-        start_epoch=args.start_epoch,
-        num_epochs=args.num_epochs,
-        log_interval=args.log_interval,
-        grad_clip=args.grad_clip
-    )
-
-    """ Updating Logs """
-    # just in case updating doesn't work
-    with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
-            pickle.dump(logs, f)
-
-    if args.start_epoch > 0:
-        for phase in ['train', 'val']:
-            logs[phase].update(old_logs[phase])
-
-    with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
-            pickle.dump(logs, f)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--num_gpus", type=int,
+                        default=1,
+                        help='Number of gpus to use in training. Default value of 1')
     parser.add_argument('--data_dir', type=str,
                         default='data',
                         help='Path of the data directory. Default value of data')
@@ -95,7 +134,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_occurrences', type=int,
                         default=5,
                         help='The minimum number of times a word must appear in the train data to be included \
-                            in the vocabulary. Default value of 5')
+                        in the vocabulary. Default value of 5')
     parser.add_argument('--max_size', type=int,
                         default=None,
                         help='The maximum size of the vocabulary. If is None, then no max size. Default value of None')
@@ -131,4 +170,7 @@ if __name__ == '__main__':
                         help='Number of layers in decoder. Default value of 1')
     args = parser.parse_args()
     args.use_cuda = not args.disable_cuda
+    if args.start_epoch == 0 and not os.path.isdir(args.output_dir):
+        os.makedirs(args.output_dir)
+        
     main(args)

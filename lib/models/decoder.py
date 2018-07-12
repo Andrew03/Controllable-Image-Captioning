@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence
 
 def create_predict_input_captions(captions):
     captions = torch.LongTensor(captions)
