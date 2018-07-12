@@ -133,7 +133,7 @@ class Decoder(nn.Module):
         best_phrases = [[
             top_scores[0][0].data[i], [top_captions[0][0].data[i]]
         ] for i in range(beam_size)]
-        next_captions = top_captions.resize(beam_size, 1)
+        next_captions = top_captions.squeeze(0).squeeze(0).unsqueeze(1)
         hidden = (hidden[0].repeat(1, beam_size, 1), hidden[1].repeat(
             1, beam_size, 1))
 

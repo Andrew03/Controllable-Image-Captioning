@@ -2,13 +2,20 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
+"""Make this custom split"""
 class CustomDataSet(Dataset):
-    def __init__(self, data, batched_data, vocabs, data_dir, transform=None):
+    def __init__(self, data, batched_data, vocabs, data_dir, transform, num_partitions=1):
         self.data = data
         self.batched_data = batched_data
         self.vocabs = vocabs
         self.data_dir = data_dir
         self.transform = transform
+        self.num_partitions = num_partitions
+        self.current_partition = 0
+
+    def select(self, partition):
+        if partition < self.num_partitions:
+            self.current_partition = partition
 
     def __getitem__(self, index):
         """Returns one data batch (images, topics, captions, caption_lengths, image_ids)."""
@@ -18,8 +25,7 @@ class CustomDataSet(Dataset):
         img_ids = []
         for (image_id, topic, sentence) in self.batched_data(index):
             image = Image.open("{}/images/{}.jpg".format(self.data_dir, image_id)).convert("RGB")
-            if self.transform is not None:
-                image = self.transform(image)
+            image = self.transform(image)
             images.append(image)
             topics.append(self.vocabs['topic_vocab'](topic))
             img_ids.append(image_id)
@@ -27,10 +33,12 @@ class CustomDataSet(Dataset):
                             [self.vocabs['word_vocab'](token) for token in sentence] +
                             [self.vocabs['word_vocab']('<EOS>')])
 
-        lengths = [len(caption) for caption in captions]
-        images_tensor = torch.stack(images, 0)
-        topics_tensor = torch.LongTensor(topics)
-        captions_tensor = torch.LongTensor(captions)
+        size = len(images) // self.num_partitions
+        offset = self.current_partition * size
+        lengths = [len(caption) for caption in captions[offset : offset + size]]
+        images_tensor = torch.stack(images[offset : offset + size], 0)
+        topics_tensor = torch.LongTensor(topics[offset : offset + size])
+        captions_tensor = torch.LongTensor(captions[offset : offset + size])
         images_tensor.requires_grad_(True)
         topics_tensor.requires_grad_(True)
         captions_tensor.requires_grad_(True)
@@ -43,7 +51,7 @@ def collate_fn(data):
     images, topics, captions, lengths, image_ids = zip(*data)
     return {'images': images[0], 'topics': topics[0], 'captions': captions[0], 'lengths': lengths[0], 'image_ids': image_ids[0]}
 
-def get_loader(data, batch_size, vocabs, data_dir, transform, progress_bar=False, randomize=True, max_size=None, shuffle=True, num_workers=1):
+def get_loader(data, batch_size, vocabs, data_dir, transform, progress_bar=False, randomize=True, max_size=None, shuffle=True, num_workers=0):
     from batch_data import batch_data
 
     batched_data = batch_data(data, batch_size, progress_bar, randomize, max_size)
@@ -58,6 +66,5 @@ def get_split_data_set(data, batch_size, vocabs, data_dir, transform, num_partit
     from batch_data import batch_data
 
     batched_data = batch_data(data, batch_size, progress_bar, randomize, max_size)
-    data_set = CustomDataSet(data, batched_data, vocabs, data_dir, transform)
-    partitions = {"{}".format(i) : 1.0 / num_partitions for i in range(num_partitions)}
-    return SplitDataset(data_set, partitions)
+    data_set = CustomDataSet(data, batched_data, vocabs, data_dir, transform, num_partitions)
+    return data_set

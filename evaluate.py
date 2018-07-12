@@ -88,7 +88,7 @@ def evaluate(args):
     
     if os.path.exists(os.path.join(args.output_dir, "evaluation_scores.pkl")):
         logs.update(old_logs)
-    with open(os.path.join(args.output_dir, "new_evaluation_scores.pkl"), "wb") as f:
+    with open(os.path.join(args.output_dir, "evaluation_scores.pkl"), "wb") as f:
         pickle.dump(logs, f)
 
 def main(args):

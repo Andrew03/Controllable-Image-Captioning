@@ -1,184 +1,136 @@
-import argparse
-import os
+import argparse 
+import os 
 import pickle
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.distributed as dist
-from torch.multiprocessing import Process
 import torchvision.transforms as transforms
-from tqdm import tqdm
-from lib.models.encoder_vgg16 import EncoderVGG16
-from lib.models.decoder import Decoder
+import lib.utils.trainer as trainer
+from lib.models.model import Model
 from lib.utils.batch_data import batch_data
 from lib.utils.data_loader import get_loader
 from lib.utils.process_data import load_data
-from lib.utils.trainer import create_data_iter, train, validate
 from lib.utils.vocabulary import load_vocab
 
 def main(args):
-    # Loading data
-    print("Loading data...")
-    train_data, dev_data, test_data, image_ids, topic_set = load_data(args.basedir)
-    print("Loading vocabulary...")
-    word_vocab = load_vocab(args.basedir, is_word_vocab=True, min_occurrences=args.min_occurrences)
-    topic_vocab = load_vocab(args.basedir, is_word_vocab=False, min_occurrences=args.min_occurrences)
+    """ Loading Data """
+    train_data, val_data, test_data, image_ids, topic_set = load_data(args.data_dir)
+    data = {'train': train_data, 'val': val_data}
+    transform = {
+        'train': transforms.Compose([
+            transforms.Resize(256),
+            transforms.RandomCrop(224),
+            transforms.RandomHorizontalFlip(), 
+            transforms.RandomVerticalFlip(), 
+            transforms.ToTensor(), 
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+                std=[0.229, 0.224, 0.225])
+        ]),
+        'val': transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(), 
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+                std=[0.229, 0.224, 0.225])
+        ])
+    }
+    vocabs = load_vocab(args.data_dir, min_occurrences=args.min_occurrences)
+    data_loaders = {
+        x: get_loader(data[x], args.batch_size, vocabs, args.data_dir, transform[x], max_size=args.max_size) for x in ['train', 'val']
+    }
 
-    # Defining models
-    print("Creating models...")
-    encoder = EncoderVGG16(is_normalized=args.is_normalized)
-    decoder = Decoder(512, 196, 512, 512, len(word_vocab), len(topic_vocab), 
-                      num_layers=args.num_layers, dropout=args.dropout, tanh_after=args.is_tanh_after)
-
-    # Defining loss and optimizers
-    loss_function = nn.NLLLoss()
-    params = list(decoder.parameters())
-    optimizer = optim.Adam(params, lr=args.lr)
-
-    # Loading models and optimizers
-    if args.load_checkpoint is not None:
-        checkpoint = torch.load(args.load_checkpoint)
-        print("loading from checkpoint {}".format(args.load_checkpoint))
-        start_epoch = checkpoint['epoch']
-        decoder.load_state_dict(checkpoint['state_dict'])
+    """ Defining Model and Training Variables """
+    device = torch.device("cuda" if torch.cuda.is_available() and args.use_cuda else "cpu")
+    model = Model(512, 196, 512, 512, len(vocabs['word_vocab']), len(vocabs['topic_vocab']), num_layers=args.num_layers, dropout=args.dropout, tanh_after=args.tanh_after, is_normalized=args.is_normalized)
+    if args.start_epoch > 0:
+        path = os.path.join(args.output_dir, "checkpoint_{}.pt".format(args.start_epoch))
+        checkpoint = torch.load(path) if args.use_cuda else torch.load(path, map_location=lambda storage, loc: storage)
+        model.load_state_dict(checkpoint['state_dict'])
+    model.to(device)
+    optimizer = optim.Adam(model.parameters(), args.lr)
+    if args.start_epoch > 0:
         optimizer.load_state_dict(checkpoint['optimizer'])
         del checkpoint
-        torch.cuda.empty_cache()
-    else:
-        start_epoch = 0
+        with open(os.path.join(args.output_dir, "logs.pkl")) as f:
+            old_logs = pickle.load(f)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=1, verbose=True)
 
-    # Enabling cuda if specified
-    device = torch.device("cuda:{}".format(args.cuda_device) if torch.cuda.is_available() and args.use_cuda else "cpu")
-    # check if this does anything or if we need to assign
-    if torch.cuda.device_count() > 1 and not args.disable_multi_gpu:
-        pass
-    encoder.to(device)
-    decoder.to(device)
-    optimizer = optim.Adam(params, lr=args.lr)
+    """ Training the Model """
+    logs, model_data = trainer.train_model_distributed(
+        model=model, 
+        criterion=nn.NLLLoss(), 
+        optimizer=optimizer, 
+        scheduler=scheduler,
+        data_loaders=data_loaders,
+        device=device,
+        output_dir=args.output_dir,
+        start_epoch=args.start_epoch,
+        num_epochs=args.num_epochs,
+        log_interval=args.log_interval,
+        grad_clip=args.grad_clip
+    )
 
-    # Defining and loading output data, if it exists
-    train_loss = {}
-    val_loss = {}
-    train_loss_file = "{}/train_loss.pkl".format(args.save_dir)
-    val_loss_file = "{}/val_loss.pkl".format(args.save_dir)
-    if os.path.isfile(train_loss_file) and os.path.isfile(val_loss_file):
-        with open(train_loss_file, "rb") as f:
-            train_loss = pickle.load(f)
-        with open(val_loss_file, "rb") as f:
-            val_loss = pickle.load(f)
+    """ Updating Logs """
+    # just in case updating doesn't work
+    with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
+            pickle.dump(logs, f)
 
+    if args.start_epoch > 0:
+        for phase in ['train', 'val']:
+            logs[phase].update(old_logs[phase])
 
-    # Defining transformations
-    train_transform = transforms.Compose([ 
-	transforms.Resize(256),
-	transforms.RandomCrop(224),
-	transforms.RandomHorizontalFlip(), 
-	transforms.RandomVerticalFlip(), 
-	transforms.ToTensor(), 
-	transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-	    std=[0.229, 0.224, 0.225])
-    ])
-    val_transform = transforms.Compose([ 
-	transforms.Resize(256),
-	transforms.CenterCrop(224),
-	transforms.ToTensor(), 
-	transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-	    std=[0.229, 0.224, 0.225])
-    ])
-
-    end_epoch = args.num_epochs + start_epoch
-    for epoch in range(start_epoch, end_epoch):
-        # Train section
-        train_data_iter = create_data_iter(train_data, args.batch_size, word_vocab, topic_vocab, args.basedir, 
-                                            train_transform, progress_bar=args.progress_bar, description="Train [{}/{}]".format(epoch + 1, end_epoch), max_size=args.max_num_batches)
-        train_epoch_loss = train(train_data_iter, encoder, decoder, loss_function, optimizer, args.grad_clip, args.log_interval, args.progress_bar, use_cuda=args.use_cuda, cuda_device=args.cuda_device)
-        train_loss.update({key + (epoch * len(train_data_iter)) : value for key, value in train_epoch_loss.items()})
-        # Validation section
-        val_data_iter = create_data_iter(dev_data, args.batch_size, word_vocab, topic_vocab, args.basedir,
-                                          val_transform, progress_bar=args.progress_bar, description="Val [{}/{}]".format(epoch + 1, end_epoch), max_size=args.max_num_batches)
-        val_epoch_loss = validate(val_data_iter, encoder, decoder, loss_function, progress_bar=args.progress_bar, use_cuda=args.use_cuda, cuda_device=args.cuda_device)
-        val_loss[epoch * len(train_data_iter)] = val_epoch_loss
-        # Saving the model
-        save_path = "{}/checkpoint_{}.pt".format(args.save_dir, epoch + 1)
-        torch.save({'epoch': epoch + 1,
-                    'state_dict': decoder.state_dict(),
-                    'optimizer': optimizer.state_dict()
-                    }, save_path)
-        if args.progress_bar:
-            tqdm.write("Saved model at {}".format(save_path))
-        else:
-            print("Saved model at {}".format(save_path))
-
-    with open(train_loss_file, "wb") as f:
-        pickle.dump(train_loss, f)
-    with open(val_loss_file, "wb") as f:
-        pickle.dump(val_loss, f)
-    print("Saved train logs and val logs at {} and {}".format(train_loss_file, val_loss_file))
+    with open(os.path.join(args.output_dir, "logs.pkl"), "wb") as f:
+            pickle.dump(logs, f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--basedir', type=str,
-                        default='.',
-                        help='The root directory of the project. Default value of \'.\' (the current directory).')
+    parser.add_argument('--data_dir', type=str,
+                        default='data',
+                        help='Path of the data directory. Default value of data')
+    parser.add_argument('--start_epoch', type=int,
+                        default=0,
+                        help='Epoch to start training from. Set to a value greater than 0 to load a model. Default value of 0')
+    parser.add_argument('--num_epochs', type=int,
+                        default=10,
+                        help='Number of epochs to train for. Default value of 10')
     parser.add_argument('--min_occurrences', type=int,
                         default=5,
                         help='The minimum number of times a word must appear in the train data to be included \
-                              in the vocabulary. Default value of 5.')
-    parser.add_argument('--is_normalized', action='store_true',
-                        help='Set to use the batch normalized vgg16.')
-    parser.add_argument('--num_layers', type=int,
+                            in the vocabulary. Default value of 5')
+    parser.add_argument('--max_size', type=int,
+                        default=None,
+                        help='The maximum size of the vocabulary. If is None, then no max size. Default value of None')
+    parser.add_argument('--batch_size', type=int,
                         default=1,
-                        help='The number of layers in the decoder. Default value of 1.')
-    parser.add_argument('--dropout', type=float,
-                        default=0.0,
-                        help='The amount of dropout to apply to the model. Default value of 0.')
-    parser.add_argument('--is_tanh_after', action='store_true',
-                        help='Set to apply the tanh activation after summing the componenets.')
+                        help='Size of a minibatch. Default value of 1')
     parser.add_argument('--lr', type=float,
-                        default=0.001,
-                        help='The learning rate to apply to the model. Default value of 0.001.')
+                        default=0.0001,
+                        help='Learning rate to train with. Default value of 0.0001')
+    parser.add_argument('--output_dir', type=str,
+                        required=True,
+                        help='Directory to output logs and model data. Required')
+    parser.add_argument('--log_interval', type=float,
+                        default=100,
+                        help='How often to log training results Default value of 100')
+    parser.add_argument('--disable_cuda', action='store_true',
+                        default=False,
+                        help='Set to disable cuda.')
+    parser.add_argument('--tanh_after', action='store_true',
+                        default=False,
+                        help='Set to use tanh after.')
+    parser.add_argument('--is_normalized', action='store_true',
+                        default=False,
+                        help='Set to disable normalize encoder.')
     parser.add_argument('--grad_clip', type=float,
                         default=5.0,
-                        help='The gradient cilp to apply to the model. Defalut value of 5.0.')
-    parser.add_argument('--load_checkpoint', type=str,
-                        default=None,
-                        help='The checkpoint to load the model from. Default value of None.')
-    parser.add_argument('--cuda_device', type=int,
-                        default=0,
-                        help='The cuda device to use. Default value of 0.')
-    parser.add_argument('--disable_cuda', action='store_true',
-                        help='Set to disable cuda usage.')
-    parser.add_argument('--disable_multi_gpu', action='store_true',
-                        help='Set to disable multi-gpu usage.')
-    parser.add_argument('--model_name', type=str,
-                        required=True,
-                        help='The name to save the model under. Required.')
-    parser.add_argument('--batch_size', type=int,
-                        default=32,
-                        help='Minibatch size. Default value of 32.')
-    parser.add_argument('--max_num_batches', type=int,
-                        default=None,
-                        help='Maximum number of batches in an epoch. Default value of None.')
-    parser.add_argument('--num_epochs', type=int,
-                        default=10,
-                        help='Number of epochs to train for. Default value of 10.')
-    parser.add_argument('--disable_progress_bar', action='store_true',
-                        help='Set to disable progress bar output.')
-    parser.add_argument('--log_interval', type=int,
-                        default=100,
-                        help='Number of minibatches to train on before logging. Default value of 100.')
-
+                        help='Gradient clip value. Default value of 5.0')
+    parser.add_argument('--dropout', type=float,
+                        default=0.5,
+                        help='Dropout value. Default value of 0.5')
+    parser.add_argument('--num_layers', type=int,
+                        default=1,
+                        help='Number of layers in decoder. Default value of 1')
     args = parser.parse_args()
     args.use_cuda = not args.disable_cuda
-    args.progress_bar = not args.disable_progress_bar
-    if args.lr <= 0.0 or \
-        args.min_occurrences <= 0 or \
-        args.num_layers <= 0 or \
-        (args.disable_cuda and not args.disable_multi_gpu):
-        print("Invalid arguments!")
-    else:
-        args.save_dir = "{}/data/checkpoints/{}".format(args.basedir, args.model_name)
-        if not os.path.exists(args.save_dir):
-            print("New model, saving at {}".format(args.save_dir))	
-            os.makedirs(args.save_dir)
-        main(args)
+    main(args)

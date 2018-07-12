@@ -11,6 +11,6 @@ class EncoderVGG16(nn.Module):
 
     def forward(self, images):
         features = self.vgg(images)
-        features_reshaped = features.view(images.size()[0], 512, 196)
+        features_reshaped = features.view(images.size(0), 512, 196)
         features_transposed = features_reshaped.transpose(1, 2)
         return features_transposed
