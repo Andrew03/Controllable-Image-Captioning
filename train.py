@@ -1,17 +1,15 @@
 import argparse 
 import os 
 import pickle
-from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 import lib.utils.trainer as trainer
-from lib.models.model import Model
-from lib.utils.batch_data import batch_data
-from lib.utils.data_loader import get_loader
 from lib.utils.process_data import load_data
 from lib.utils.vocabulary import load_vocab
+from lib.utils.data_loader import get_loader
+from lib.models.model import Model
 
 def main(args):
     """ Loading Data """

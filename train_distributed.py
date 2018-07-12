@@ -8,19 +8,17 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.multiprocessing import Process
-from lib.models.model import Model
-from lib.utils.batch_data import batch_data
-from lib.utils.data_loader import get_loader, get_split_data_set
-import lib.utils.data_loader
+import lib.utils.trainer as trainer
 from lib.utils.process_data import load_data
 from lib.utils.vocabulary import load_vocab
-import lib.utils.trainer as trainer
+from lib.utils.data_loader import get_loader, get_split_data_set, collate_fn
+from lib.models.model import Model
 
 def run(rank, size, split_data, vocabs, args):
     for mode, data in split_data.items():
         data.select(rank)
     data_loaders = {
-        x: DataLoader(dataset=split_data[x], shuffle=True, num_workers=1, collate_fn=lib.utils.data_loader.collate_fn) for x in ['train', 'val']
+        x: DataLoader(dataset=split_data[x], shuffle=True, num_workers=1, collate_fn=collate_fn) for x in ['train', 'val']
     }
     device = torch.device("cuda:{}".format(rank) if torch.cuda.is_available() and args.use_cuda else "cpu")
     model = Model(512, 196, 512, 512, len(vocabs['word_vocab']), len(vocabs['topic_vocab']), num_layers=args.num_layers, dropout=args.dropout, tanh_after=args.tanh_after, is_normalized=args.is_normalized)

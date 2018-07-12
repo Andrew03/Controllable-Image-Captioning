@@ -1,25 +1,21 @@
 import argparse 
 import os 
-import pickle
-from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
-import lib.utils.trainer as trainer
 from lib.models.model import Model
-from lib.utils.batch_data import batch_data
 from lib.utils.data_loader import get_loader
 from lib.utils.process_data import load_data
 from lib.utils.vocabulary import load_vocab
 
-def run(model, data, vocabs, device):
+def run(model, data, vocabs, device, beam_size=10):
     model.eval()
     captions = data['captions']
     targets = captions.narrow(1, 1, captions.size(1) - 2)
     images = data['images'].to(device)
     topics = data['topics'].to(device)
-    outputs = model.sample(images, topics, beam_size=10)
+    outputs = model.sample(images, topics, beam_size=beam_size)
     print("topic: {}".format(vocabs['topic_vocab'](topics[0].item())))
     print("OUTPUTS:")
     for i in range(10):
@@ -49,7 +45,7 @@ def main(args):
                 std=[0.229, 0.224, 0.225])
         ])
     }
-    vocabs = load_vocab(args.data_dir, min_occurrences=5)
+    vocabs = load_vocab(args.data_dir, min_occurrences=args.min_occurrences)
     data_loaders = {
         x: get_loader(data[x], 1, vocabs, args.data_dir, transform[x], max_size=100) for x in ['train', 'val']
     }
@@ -63,7 +59,7 @@ def main(args):
 
     data =  next(iter(data_loaders['val']))
 
-    run(model, data, vocabs, device)
+    run(model, data, vocabs, device, args.beam_size)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -92,6 +88,9 @@ if __name__ == "__main__":
     parser.add_argument('--num_layers', type=int,
                         default=1,
                         help='Number of layers in decoder. Default value of 1')
+    parser.add_argument('--beam_size', type=int,
+                        default=10,
+                        help='Beam size to use in generation. Default value of 10')
     args = parser.parse_args()
     args.use_cuda = not args.disable_cuda
     main(args)
