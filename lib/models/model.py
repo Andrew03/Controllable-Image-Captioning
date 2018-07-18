@@ -19,6 +19,10 @@ class Model(nn.Module):
         features = self.encoder(images)
         return self.decoder.sample(features, topics, beam_size, start_token, end_token)
 
+    def sample_v2(self, images, topics, beam_size=1, start_token=0, end_token=1):
+        features = self.encoder(images)
+        return self.decoder.sample_v2(features, topics, beam_size, start_token, end_token)
+
     def batch_sample(self, images, topics, beam_size=1, start_token=0, end_token=1):
         features = self.encoder(images)
         return self.decoder.batch_sample(features, topics, beam_size, start_token, end_token)

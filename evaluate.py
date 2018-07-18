@@ -1,6 +1,6 @@
 import argparse
 
-def get_corpus_bleu(model, data_loader, vocabs, device):
+def get_corpus_bleu(model, data_loader, vocabs, device, beam_size):
     import torch
     from pycocoevalcap.bleu.bleu import Bleu
     from pycocoevalcap.cider.cider import Cider
@@ -26,9 +26,10 @@ def get_corpus_bleu(model, data_loader, vocabs, device):
             images = data['images'].to(device)
             topics = data['topics'].to(device)
 
-            predictions = model.sample(images, topics, beam_size=args.beam_size)
+            predictions = model.sample_v2(images, topics, beam_size=beam_size)
             sequences_ref[i] = [" ".join([vocabs['word_vocab'](j.item()) for j in targets[0] if j.item() not in bad_toks])]
-            sequences_gen[i] = [" ".join([vocabs['word_vocab'](j.item()) for j in predictions[0][1] if j.item() not in bad_toks])]
+            #sequences_gen[i] = [" ".join([vocabs['word_vocab'](j.item()) for j in predictions[0][1] if j.item() not in bad_toks])]
+            sequences_gen[i] = [" ".join([vocabs['word_vocab'](j) for j in predictions[-1] if j not in bad_toks])]
 
     """Getting Scores"""
     bleu_score, bleu_scores = scorer_bleu.compute_score(
@@ -69,7 +70,7 @@ def evaluate(args):
     """Defining Logging Structure"""
     logs = {}
     if os.path.exists(os.path.join(args.output_dir, "evaluation_scores.pkl")):
-        with open(os.path.join(args.output_dir, "evaluation_scores.pkl"), "bb") as f:
+        with open(os.path.join(args.output_dir, "evaluation_scores.pkl"), "rb") as f:
             old_logs = pickle.load(f)
 
     """Defining Model and Training Variables"""
@@ -83,7 +84,7 @@ def evaluate(args):
         del checkpoint
         progress_bar = tqdm(iterable=data_loader, desc="Evaluate Model {}".format(epoch))
         model.eval()
-        log = get_corpus_bleu(model, progress_bar, vocabs, device)
+        log = get_corpus_bleu(model, progress_bar, vocabs, device, args.beam_size)
         logs[epoch] = log
     
     if os.path.exists(os.path.join(args.output_dir, "evaluation_scores.pkl")):
