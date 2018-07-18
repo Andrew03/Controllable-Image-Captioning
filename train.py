@@ -32,8 +32,8 @@ def run(rank, size, split_data, vocabs, word_frequencies, args):
         del checkpoint
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2, verbose=True)
 
-    total_words = sum(word_frequencies)
-    weights = torch.FloatTensor([1 - exp(sqrt(count / total_words)) for count in word_frequencies])
+    max_count = max(word_frequencies)
+    weights = torch.FloatTensor([1 / exp(count / max_count) for count in word_frequencies])
     weights = weights.to(device)
     criterion = nn.NLLLoss(weight=weights)
 
