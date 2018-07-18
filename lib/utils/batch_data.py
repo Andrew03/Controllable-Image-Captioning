@@ -20,7 +20,7 @@ class BatchedData(object):
 
 def batch_data(data, batch_size, progress_bar=True, randomize=True, max_size=None):
     import random
-    from lib.utils.detect_notebook import is_notebook()
+    from lib.utils.detect_notebook import is_notebook
     if is_notebook():
         from tqdm import tqdm_notebook as tqdm
     else:

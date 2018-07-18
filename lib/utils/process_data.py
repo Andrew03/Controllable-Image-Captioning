@@ -55,6 +55,23 @@ def parse_data(train_split, dev_split, test_split, paragraph_topics, paragraph_j
                     test_data.append((image_id, topic, sentence))
     return train_data, dev_data, test_data, image_ids, topic_set
 
+def get_word_frequencies(data, vocab, progress_bar=False):
+    from collections import Counter
+    from lib.utils.detect_notebook import is_notebook
+    if is_notebook:
+        from tqdm import tqdm_notebook as tqdm
+    else:
+        from tqdm import tqdm
+
+    counter = Counter()
+    for _, _, sentence in tqdm(data) if progress_bar else data:
+        tokens = [vocab("<SOS>")] + [vocab(word) for word in sentence] + [vocab("<EOS>")]
+        counter.update(tokens)
+    counts = [count for word, count in sorted(counter.items(), key=lambda x: x[0])]
+    assert(len(vocab) == len(counts)) # Otherwise have to format return list
+    return counts
+
+
 def save_data(train_data, dev_data, test_data, image_ids, topic_set, data_dir):
     import pickle
 

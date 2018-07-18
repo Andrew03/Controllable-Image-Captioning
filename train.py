@@ -1,13 +1,15 @@
 import torch.distributed as dist
 
-def run(rank, size, split_data, vocabs, args):
+def run(rank, size, split_data, vocabs, word_frequencies, args):
     import os
     import pickle
+    from math import exp, sqrt
     import torch
+    import torch.nn as nn
     import torch.optim as optim
     from torch.utils.data import DataLoader
     import lib.utils.trainer as trainer
-    from lib.utils.data_loader import get_split_data_set
+    from lib.utils.data_loader import collate_fn
     from lib.models.model import Model
 
     for mode, data in split_data.items():
@@ -22,13 +24,18 @@ def run(rank, size, split_data, vocabs, args):
         checkpoint = torch.load(path) if args.use_cuda else torch.load(path, map_location=lambda storage, loc: storage)
         model.load_state_dict(checkpoint['state_dict'])
         del checkpoint
-    model.to(device)
+    model = model.to(device)
+
     optimizer = optim.Adam(model.parameters(), args.lr)
     if args.start_epoch > 0:
         optimizer.load_state_dict(checkpoint['optimizer'])
         del checkpoint
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2, verbose=True)
-    criterion = nn.NLLLoss()
+
+    total_words = sum(word_frequencies)
+    weights = torch.FloatTensor([1 - exp(sqrt(count / total_words)) for count in word_frequencies])
+    weights = weights.to(device)
+    criterion = nn.NLLLoss(weight=weights)
 
     logs, model_data = trainer.train_model(
         model, 
@@ -64,20 +71,20 @@ def average_gradients(model):
 def no_average(model):
     pass
 
-def init_processes(rank, size, split_data, vocabs, args, fn, backend='gloo'):
+def init_processes(rank, size, split_data, vocabs, word_frequencies, args, fn, backend='gloo'):
     import os
 
     """ Initialize the distributed environment. """
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group(backend, rank=rank, world_size=size)
-    fn(rank, size, split_data, vocabs, args)
+    fn(rank, size, split_data, vocabs, word_frequencies, args)
 
 
 def main(args):
     import torchvision.transforms as transforms
     from torch.multiprocessing import Process
-    from lib.utils.process_data import load_data
+    from lib.utils.process_data import load_data, get_word_frequencies
     from lib.utils.vocabulary import load_vocab
     from lib.utils.data_loader import get_split_data_set
 
@@ -103,15 +110,16 @@ def main(args):
         ])
     }
     vocabs = load_vocab(args.data_dir, min_occurrences=args.min_occurrences)
+    word_frequencies = get_word_frequencies(train_data, vocabs['word_vocab'])
     while args.batch_size % args.num_gpus != 0:
         args.batch_size += 1
     split_data = {
-        x: get_split_data_set(data[x], args.batch_size, vocabs, args.data_dir, transform[x], args.num_gpus, randomize=True, max_size=args.max_size) for x in ['train', 'val']
+        x: get_split_data_set(data[x], args.batch_size // args.num_gpus, vocabs, args.data_dir, transform[x], args.num_gpus, randomize=True, max_size=args.max_size) for x in ['train', 'val']
     }
     if args.num_gpus > 1:
         processes = []
         for rank in range(args.num_gpus):
-            p = Process(target=init_processes, args=(rank, args.num_gpus, split_data, vocabs, args, run))
+            p = Process(target=init_processes, args=(rank, args.num_gpus, split_data, vocabs, word_frequencies, args, run))
             p.start()
             processes.append(p)
 
