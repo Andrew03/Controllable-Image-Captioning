@@ -12,6 +12,7 @@ class CustomDataSet(Dataset):
         self.transform = transform
         self.num_partitions = num_partitions
         self.current_partition = 0
+        self.partition_size = len(batched_data) / self.num_partitions
 
     def select(self, partition):
         if partition < self.num_partitions:
@@ -23,7 +24,7 @@ class CustomDataSet(Dataset):
         topics = []
         captions = []
         img_ids = []
-        for (image_id, topic, sentence) in self.batched_data(index):
+        for (image_id, topic, sentence) in self.batched_data(index + self.current_partition * self.partition_size):
             image = Image.open("{}/images/{}.jpg".format(self.data_dir, image_id)).convert("RGB")
             image = self.transform(image)
             images.append(image)
@@ -33,19 +34,17 @@ class CustomDataSet(Dataset):
                             [self.vocabs['word_vocab'](token) for token in sentence] +
                             [self.vocabs['word_vocab']('<EOS>')])
 
-        size = len(images) // self.num_partitions
-        offset = self.current_partition * size
-        lengths = [len(caption) for caption in captions[offset : offset + size]]
-        images_tensor = torch.stack(images[offset : offset + size], 0)
-        topics_tensor = torch.LongTensor(topics[offset : offset + size])
-        captions_tensor = torch.LongTensor(captions[offset : offset + size])
+        lengths = [len(caption) for caption in captions]
+        images_tensor = torch.stack(images, 0)
+        topics_tensor = torch.LongTensor(topics)
+        captions_tensor = torch.LongTensor(captions)
         images_tensor.requires_grad_(True)
         topics_tensor.requires_grad_(True)
         captions_tensor.requires_grad_(True)
         return images_tensor, topics_tensor, captions_tensor, lengths, img_ids
 
     def __len__(self):
-        return len(self.batched_data)
+        return self.partition_size
 
 def collate_fn(data):
     images, topics, captions, lengths, image_ids = zip(*data)

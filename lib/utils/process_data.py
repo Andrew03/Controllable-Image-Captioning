@@ -65,8 +65,10 @@ def get_word_frequencies(data, vocab, progress_bar=False):
 
     counter = Counter()
     for _, _, sentence in tqdm(data) if progress_bar else data:
-        tokens = [vocab("<SOS>")] + [vocab(word) for word in sentence] + [vocab("<EOS>")]
+        tokens = [vocab(word) for word in sentence]
         counter.update(tokens)
+    counter[vocab("<SOS>")] = 1
+    counter[vocab("<EOS>")] = 1
     counts = [count for word, count in sorted(counter.items(), key=lambda x: x[0])]
     assert(len(vocab) == len(counts)) # Otherwise have to format return list
     return counts
