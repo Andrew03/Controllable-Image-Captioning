@@ -12,7 +12,7 @@ def find_accuracy(predicted, target, length):
 def no_average(model):
     return
 
-def train_model(model, criterion, optimizer, scheduler, data_loaders, device, output_dir, rank=0, num_gpus=1, average_gradients=no_average, start_epoch=0, num_epochs=10, log_interval=100, grad_clip=5.0):
+def train_model(model, criterion, optimizer, scheduler, data_loaders, device, output_dir, rank=0, num_gpus=1, average_gradients=no_average, start_epoch=0, num_epochs_teacher=10, num_epochs_no_teacher=10, log_interval=100, grad_clip=5.0):
     import os
     import torch
     from torch.nn.utils.rnn import pack_padded_sequence
@@ -31,8 +31,9 @@ def train_model(model, criterion, optimizer, scheduler, data_loaders, device, ou
     model_data = {}
 
     """ Main Training Loop """
-    end_epoch = start_epoch + num_epochs + 1
+    end_epoch = start_epoch + num_epochs_teacher + num_epochs_no_teacher + 1
     for epoch in range(start_epoch + 1, end_epoch):
+        is_teacher = epoch <= start_epoch + num_epochs_teacher + 1
         for phase in ['train', 'val']:
             logs[phase][epoch] = {'loss': {}, 'accuracy': {}}
             is_train = phase == 'train'
@@ -44,7 +45,7 @@ def train_model(model, criterion, optimizer, scheduler, data_loaders, device, ou
             running_loss = 0.0
             running_accuracy = 0.0
 
-            progress_bar = tqdm(iterable=data_loaders[phase], desc="{} [{}/{}]".format(phase, epoch, end_epoch - 1)) if rank == 0 else data_loaders[phase]
+            progress_bar = tqdm(iterable=data_loaders[phase], desc="{} ({}) [{}/{}]".format(phase, "teacher" if is_teacher else "no teacher", epoch, end_epoch - 1)) if rank == 0 else data_loaders[phase]
             for i, data in enumerate(progress_bar, 1):
                 captions = data['captions']
                 optimizer.zero_grad()
@@ -59,7 +60,7 @@ def train_model(model, criterion, optimizer, scheduler, data_loaders, device, ou
                     inputs = inputs.to(device)
                     packed_targets = packed_targets.to(device)
 
-                    outputs = model(images, topics, inputs)
+                    outputs = model(images, topics, inputs, use_teacher=is_teacher)
                     packed_outputs = pack_padded_sequence(outputs, [length for _ in range(captions.size(0))], batch_first=True)[0]
                     loss = criterion(packed_outputs, packed_targets)
 

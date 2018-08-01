@@ -35,6 +35,7 @@ def run(rank, size, split_data, vocabs, word_frequencies, args):
     max_count = max(word_frequencies)
     weights = torch.FloatTensor([1 / exp(count / max_count) for count in word_frequencies])
     weights = weights.to(device)
+    #criterion = nn.NLLLoss(weight=weights)
     criterion = nn.NLLLoss(weight=weights)
 
     logs, model_data = trainer.train_model(
@@ -49,7 +50,8 @@ def run(rank, size, split_data, vocabs, word_frequencies, args):
         args.num_gpus,
         average_gradients if size > 1 else no_average, 
         args.start_epoch, 
-        args.num_epochs, 
+        args.num_epochs_teacher,
+        args.num_epochs_no_teacher, 
         args.log_interval, 
         args.grad_clip)
     """Updating Logs"""
@@ -142,9 +144,12 @@ if __name__ == "__main__":
     parser.add_argument('--start_epoch', type=int,
                         default=0,
                         help='Epoch to start training from. Set to a value greater than 0 to load a model. Default value of 0')
-    parser.add_argument('--num_epochs', type=int,
+    parser.add_argument('--num_epochs_teacher', type=int,
                         default=10,
-                        help='Number of epochs to train for. Default value of 10')
+                        help='Number of epochs to train for with teacher forcing. Default value of 10')
+    parser.add_argument('--num_epochs_no_teacher', type=int,
+                        default=10,
+                        help='Number of epochs to train for without teacher forcing. Default value of 10')
     parser.add_argument('--min_occurrences', type=int,
                         default=5,
                         help='The minimum number of times a word must appear in the train data to be included \

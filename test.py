@@ -1,19 +1,20 @@
 def run(model, data, vocabs, device, beam_size=10):
-    import torch
-
     model.eval()
-    with torch.no_grad():
-        captions = data['captions']
-        targets = captions.narrow(1, 1, captions.size(1) - 2)
-        images = data['images'].to(device)
-        topics = data['topics'].to(device)
-        outputs = model.sample(images, topics, beam_size=beam_size)
-        print("topic: {}".format(vocabs['topic_vocab'](topics[0].item())))
-        print("OUTPUTS:")
-        for i in range(len(outputs)):
-            print(" ".join([vocabs['word_vocab'](x.item()) for x in outputs[i][1]]))
-        print("TARGETS:")
-        print(" ".join([vocabs['word_vocab'](x.item()) for x in targets[0]]))
+    captions = data['captions']
+    targets = captions.narrow(1, 1, captions.size(1) - 2)
+    images = data['images'].to(device)
+    topics = data['topics'].to(device)
+    outputs = model.sample_v2(images, topics, beam_size=beam_size)
+    print("topic: {}".format(vocabs['topic_vocab'](topics[0].item())))
+    print("OUTPUTS:")
+    for i in range(len(outputs)):
+        print(" ".join([vocabs['word_vocab'](x.item()) for x in outputs[i][1][:-1]]))
+    print("TARGETS:")
+    print(" ".join([vocabs['word_vocab'](x.item()) for x in targets[0]]))
+    outputs = model.sample(images, topics, beam_size=beam_size)
+    print("OUTPUTS V2:")
+    for i in range(len(outputs)):
+        print(" ".join([vocabs['word_vocab'](x) for x in outputs[i][:-1]]))
 
 def main(args):
     import os.path

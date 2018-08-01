@@ -28,8 +28,8 @@ def get_corpus_bleu(model, data_loader, vocabs, device, beam_size):
 
             predictions = model.sample_v2(images, topics, beam_size=beam_size)
             sequences_ref[i] = [" ".join([vocabs['word_vocab'](j.item()) for j in targets[0] if j.item() not in bad_toks])]
-            #sequences_gen[i] = [" ".join([vocabs['word_vocab'](j.item()) for j in predictions[0][1] if j.item() not in bad_toks])]
-            sequences_gen[i] = [" ".join([vocabs['word_vocab'](j) for j in predictions[-1] if j not in bad_toks])]
+            sequences_gen[i] = [" ".join([vocabs['word_vocab'](j.item()) for j in predictions[0][1] if j.item() not in bad_toks])]
+            # sequences_gen[i] = [" ".join([vocabs['word_vocab'](j) for j in predictions[0] if j not in bad_toks])]
 
     """Getting Scores"""
     bleu_score, bleu_scores = scorer_bleu.compute_score(

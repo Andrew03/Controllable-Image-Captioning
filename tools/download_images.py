@@ -1,6 +1,6 @@
 
 def download_images(basedir, progress_bar=True):
-    import urllib.request 
+    import requests
     import json
     import _init_paths
     from lib.utils.detect_notebook import is_notebook
@@ -12,7 +12,9 @@ def download_images(basedir, progress_bar=True):
     with open("{}/data/raw/paragraphs_v1.json".format(basedir), "r") as f:
         paragraph_json = json.load(f)
         for json in (tqdm(paragraph_json) if progress_bar else paragraph_json):
-            urllib.request.urlretrieve(json['url'], "{}/data/images/{}.jpg".format(basedir, json['image_id']))
+            resp = requests.get(json['url'], verify=False)
+            with open("{}/data/images/{}.jpg".format(basedir, json['image_id']), "wb") as g:
+                g.write(resp.content)
 
 def main(args):
     download_images(args.basedir, not args.disable_progress_bar)

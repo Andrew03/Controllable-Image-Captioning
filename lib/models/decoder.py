@@ -64,14 +64,14 @@ class Decoder(nn.Module):
         embedding = self.word_embed(captions)
         attention = self._compute_attention(features, topic_embeddings, hidden[0].narrow(0, 0, 1))[0]
         input = self.dropout_layer(torch.cat([attention, embedding], 2))
-        print("input device: {}, model device: {}, hidden device: {}".format(input.get_device(), list(self.lstm.parameters())[0].get_device(), hidden[0].get_device()))
-        print("input size: {}, hidden size: {}".format(input.size(), hidden[0].size()))
+        # print("input device: {}, model device: {}, hidden device: {}".format(input.get_device(), list(self.lstm.parameters())[0].get_device(), hidden[0].get_device()))
+        # print("input size: {}, hidden size: {}".format(input.size(), hidden[0].size()))
         out, hidden = self.lstm(input, hidden)
         words = self.dropout_layer(self.output(self.dropout_layer(out)))
         word_scores = F.log_softmax(words, dim=2)
         return word_scores, hidden
 
-    def forward(self, features, topics, captions):
+    def forward(self, features, topics, captions, use_teacher=False):
         """
         topic: B x 1
         features: B x vis_num x vis_dim
@@ -81,11 +81,13 @@ class Decoder(nn.Module):
         hidden = self._init_hidden(features, topic_embeddings)
         word_space = None
         lengths = captions.size(1)
+        current_caption = captions.narrow(1, 0, 1)
         average_attention = None
         for i in range(lengths):
-            current_caption = captions.narrow(1, i, 1)
             word_scores, hidden = self.single_forward(features, topic_embeddings, current_caption, hidden)
             word_space = torch.cat([word_space, word_scores], 1) if word_space is not None else word_scores
+            if i + 1 < lengths:
+                current_caption = captions.narrow(1, i + 1, 1) if use_teacher else word_scores.max(2)[1].detach()
         return word_space, hidden
 
     def sample(self, features, topics, beam_size=1, start_token=0, end_token=1):
@@ -124,10 +126,10 @@ class Decoder(nn.Module):
 
             current_indices = score_indices / beam_size
             hidden = (hidden[0].index_select(1, current_indices), hidden[1].index_select(1, current_indices))
-        return [x[1:] for _, x in sorted(zip(completed_scores, completed_phrases), key=lambda pair: pair[0] / len(pair[1]))][:-beam_size]
+        return [x[1:] for _, x in sorted(zip(completed_scores, completed_phrases), key=lambda pair: pair[0] / len(pair[1]), reverse=True)][:beam_size]
 
 
-    def sample_v1(self, features, topics, beam_size=1, start_token=0, end_token=1):
+    def sample_v2(self, features, topics, beam_size=1, start_token=0, end_token=1):
         topic_embeddings = self.topic_embed(topics)
         hidden = self._init_hidden(features, topic_embeddings)
         completed_phrases = []

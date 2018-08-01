@@ -11,9 +11,9 @@ class Model(nn.Module):
     def parameters(self):
         return self.decoder.parameters()
 
-    def forward(self, images, topics, captions):
+    def forward(self, images, topics, captions, use_teacher=False):
         features = self.encoder(images)
-        return self.decoder(features, topics, captions)[0]
+        return self.decoder(features, topics, captions, use_teacher)[0]
 
     def sample(self, images, topics, beam_size=1, start_token=0, end_token=1):
         features = self.encoder(images)
